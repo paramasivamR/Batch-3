@@ -1,0 +1,77 @@
+# Load the dataset
+df = pd.read_csv('Dataset.csv', index_col='Date', parse_dates=True)
+
+# Select the closing price as the target variable
+data = df['Close'].values.reshape(-1, 1)
+
+# Scale the data between 0 and 1
+scaler = MinMaxScaler(feature_range=(0, 1))
+data = scaler.fit_transform(data)
+
+# Split the data into training and testing sets
+train_size = int(len(data) * 0.8)
+train_data, test_data = data[0:train_size, :], data[train_size:len(data), :]
+
+# Create the dataset with lookback
+def create_dataset(dataset, look_back=60):
+    X, Y = [], []
+    for i in range(look_back, len(dataset)):
+        X.append(dataset[i - look_back:i, 0])
+        Y.append(dataset[i, 0])
+    return np.array(X), np.array(Y)
+
+look_back = 60
+X_train, Y_train = create_dataset(train_data, look_back)
+X_test, Y_test = create_dataset(test_data, look_back)
+
+# Reshape the input data to be [samples, time steps, features]
+X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+
+# Define the LSTM model 
+# This was missing in the original code and caused the error
+model = Sequential()
+model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
+model.add(LSTM(units=50))
+model.add(Dense(1))
+
+# Compile the model
+model.compile(loss='mean_squared_error', optimizer='adam')
+
+# Fit the model to the training data
+model.fit(X_train, Y_train, epochs=100, batch_size=32) # Adjust epochs and batch_size as needed
+
+
+# Make predictions
+train_predict = model.predict(X_train)
+test_predict = model.predict(X_test)
+
+# Invert the scaling to get actual prices
+train_predict = scaler.inverse_transform(train_predict)
+Y_train = scaler.inverse_transform([Y_train])
+test_predict = scaler.inverse_transform(test_predict)
+Y_test = scaler.inverse_transform([Y_test])
+
+# Calculate root mean squared error (RMSE)
+train_rmse = np.sqrt(mean_squared_error(Y_train[0], train_predict[:, 0]))
+test_rmse = np.sqrt(mean_squared_error(Y_test[0], test_predict[:, 0]))
+
+print('Train RMSE: %.2f' % (train_rmse))
+print('Test RMSE: %.2f' % (test_rmse))
+
+# Plot the results
+plt.plot(df.index[look_back:train_size + look_back], Y_train[0], color='blue', label='Actual Stock Price')
+plt.plot(df.index[look_back:train_size + look_back], train_predict[:, 0], color='red', label='Predicted Stock Price')
+plt.title('Stock Price Prediction (Training Data)')
+plt.xlabel('Time')
+plt.ylabel('Stock Price')
+plt.legend()
+plt.show()
+
+plt.plot(df.index[train_size + look_back:], Y_test[0], color='blue', label='Actual Stock Price')
+plt.plot(df.index[train_size + look_back:], test_predict[:, 0], color='red', label='Predicted Stock Price')
+plt.title('Stock Price Prediction (Testing Data)')
+plt.xlabel('Time')
+plt.ylabel('Stock Price')
+plt.legend()
+plt.show()
