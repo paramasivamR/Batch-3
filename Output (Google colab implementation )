@@ -1,0 +1,55 @@
+import yfinance as yf
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import MinMaxScaler
+from keras.models import Sequential
+from keras.layers import LSTM, Dense￼Enter
+# Get the stock data
+df = yf.download('AAPL', start='2020-01-01', end='2023-01-01')
+
+# Select the 'Close' price as the target variable
+data = df[['Close']].values
+
+# Scale the data between 0 and 1
+scaler = MinMaxScaler(feature_range=(0, 1))
+data = scaler.fit_transform(data)
+# Split the data into training and testing sets
+train_size = int(len(data) * 0.8)
+train_data, test_data = data[0:train_size,:], data[train_size:len(data),:]
+
+# Create a function to prepare the dataset for LSTM
+def create_dataset(dataset, look_back=60):
+    X, Y = [], []
+    for i in range(look_back, len(dataset)):
+        X.append(dataset[i-look_back:i, 0])
+        Y.append(dataset[i, 0])
+    return np.array(X), np.array(Y)
+
+# Reshape the data for LSTM
+look_back = 60
+X_train, Y_train = create_dataset(train_data, look_back)
+X_test, Y_test = create_dataset(test_data, look_back)
+
+# Reshape the input to be [samples, time steps, features]
+X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+# Create the LSTM model
+model = Sequential()
+model.add(LSTM(units=50, return_sequences=True, input_shape=(X_train.shape[1], 1)))
+model.add(LSTM(units=50))
+model.add(Dense(1))
+
+# Compile the model
+model.compile(loss='mean_squared_error', optimizer='adam')
+
+# Train the model
+model.fit(X_train, Y_train, epochs=100, batch_size=32)
+# Make predictions
+predictions = model.predict(X_test)
+
+# Invert the scaling to get actual prices
+predictions = scaler.inverse_transform(predictions)
+Y_test = scaler.inverse_transform([Y_test])
+
+# Evaluate the model
+# (You can use metrics like RMSE, MAE, etc.)
